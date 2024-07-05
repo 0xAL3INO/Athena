@@ -25,7 +25,7 @@ class athena(PayloadType):
         SupportedOS.Linux,
         SupportedOS.MacOS,
     ]  # supported OS and architecture combos
-    wrapper = True  # does this payload type act as a wrapper for another payloads inside of it?
+    wrapper = False  # does this payload type act as a wrapper for another payloads inside of it?
     wrapped_payloads = ["scarecrow_wrapper"]  # if so, which payload types. If you are writing a wrapper, you will need to modify this variable (adding in your wrapper's name) in the builder.py of each payload that you want to utilize your wrapper.
     note = """A cross platform .NET compatible agent."""
     supports_dynamic_loading = True  # setting this to True allows users to only select a subset of commands when generating a payload
