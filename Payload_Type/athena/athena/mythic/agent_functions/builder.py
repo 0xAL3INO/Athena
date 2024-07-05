@@ -19,7 +19,7 @@ import pefile
 class athena(PayloadType):
     name = "athena"  # name that would show up in the UI
     file_extension = "zip"  # default file extension to use when creating payloads
-    author = "@checkymander"  # author of the payload type
+    author = "@yaboy"  # author of the payload type
     supported_os = [
         SupportedOS.Windows,
         SupportedOS.Linux,
